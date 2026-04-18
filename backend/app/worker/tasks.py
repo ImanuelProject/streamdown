@@ -1,7 +1,7 @@
 import asyncio
 import os
 import shutil
-from redis.asyncio import Redis
+from redis import asyncio as redis
 from app.core.config import settings
 from app.services.downloader import download_single, download_playlist
 from app.services.redis_state import set_task_status
@@ -11,7 +11,7 @@ async def execute_download(ctx, url: str, is_playlist: bool, task_id: str):
     Fungsi latar belakang (Background Job) yang dieksekusi oleh ARQ Worker.
     Fungsi ini bersifat asinkronus (async) tapi menjalankan fungsi yt-dlp secara threadpool.
     """
-    redis_client = Redis.from_url(settings.REDIS_URL)
+    redis_client = redis.Redis.from_url(settings.REDIS_URL)
     
     # Path diletakkan di ./data yang tersambung via volume Docker
     output_dir = f"/data/{task_id}"
@@ -21,10 +21,17 @@ async def execute_download(ctx, url: str, is_playlist: bool, task_id: str):
         await set_task_status(redis_client, task_id, "DOWNLOADING")
         
         loop = asyncio.get_event_loop()
+
+        def update_progress(p):
+            # Gunakan asyncio.run_coroutine_threadsafe karena dipanggil dari thread executor
+            asyncio.run_coroutine_threadsafe(
+                set_task_status(redis_client, task_id, "DOWNLOADING", progress=p),
+                loop
+            )
         
         if is_playlist:
             # Mengunduh secara sinkron di latar belakang
-            await loop.run_in_executor(None, download_playlist, url, output_dir)
+            await loop.run_in_executor(None, download_playlist, url, output_dir, update_progress)
             await set_task_status(redis_client, task_id, "ZIPPING")
             
             # Membungkus folder menjadi ZIP
@@ -36,7 +43,7 @@ async def execute_download(ctx, url: str, is_playlist: bool, task_id: str):
             
             await set_task_status(redis_client, task_id, "COMPLETED", result_path=f"{zip_path_base}.zip")
         else:
-            await loop.run_in_executor(None, download_single, url, output_dir)
+            await loop.run_in_executor(None, download_single, url, output_dir, update_progress)
             
             # Mencari lokasi file hasil unduhan
             files = os.listdir(output_dir)

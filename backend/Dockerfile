@@ -9,8 +9,8 @@ RUN apt-get update && \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install poetry
-RUN pip install --no-cache-dir poetry
+# Install poetry and setuptools (spotdl needs pkg_resources from setuptools)
+RUN pip install --no-cache-dir poetry setuptools
 
 # Copy pyproject.toml
 COPY pyproject.toml poetry.lock* ./
@@ -18,7 +18,8 @@ COPY pyproject.toml poetry.lock* ./
 # Configure poetry to not use a virtualenv inside the container,
 # but install packages into system python
 RUN poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi --no-root
+    poetry install --no-interaction --no-ansi --no-root && \
+    pip install --no-cache-dir "setuptools<70.0.0"
 
 # Copy app source
 COPY app/ app/
