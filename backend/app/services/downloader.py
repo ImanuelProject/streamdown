@@ -58,66 +58,64 @@ def _get_youtube_info(url: str) -> dict:
             raise Exception(f"Gagal mengambil data dari YouTube: {str(e)}")
 
 def _get_spotify_info(url: str) -> dict:
-    """Ekstrak metadata dari Spotify menggunakan spotdl v4.x."""
+    """Ekstrak metadata dari Spotify secara instan menggunakan OEmbed API."""
+    try:
+        import urllib.request
+        import json
+        
+        # OEmbed API adalah cara tercepat untuk mendapatkan metadata publik (Thumbnail & Title)
+        oembed_url = f"https://open.spotify.com/oembed?url={url}"
+        
+        with urllib.request.urlopen(oembed_url, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            
+            # Judul biasanya formatnya: "Song Name by Artist Name"
+            title = data.get("title", "Unknown Spotify Track")
+            thumbnail = data.get("thumbnail_url")
+            
+            # OEmbed tidak memberitahu jumlah lagu jika playlist, 
+            # jadi kita tetap gunakan logika deteksi sederhana
+            is_playlist = is_spotify_playlist(url)
+            
+            return {
+                "title": title,
+                "thumbnail": thumbnail,
+                "is_playlist": is_playlist,
+                "items_count": 0 if is_playlist else 1 # 0 berarti 'Banyak' untuk playlist
+            }
+            
+    except Exception as e:
+        # Fallback ke spotdl jika OEmbed gagal (misal: URL tidak didukung OEmbed)
+        return _get_spotify_info_fallback(url)
+
+def _get_spotify_info_fallback(url: str) -> dict:
+    """Fallback menggunakan spotdl jika OEmbed tidak tersedia."""
     try:
         save_path = f"/tmp/spotdl_{hash(url)}.spotdl"
-        
-        # Hapus file lama jika ada
         if os.path.exists(save_path):
             os.remove(save_path)
-        
-        # Spotdl 4.x syntax: spotdl save [url] --save-file [path]
+            
         result = subprocess.run(
             ["spotdl", "save", url, "--save-file", save_path],
-            capture_output=True, text=True, timeout=60
+            capture_output=True, text=True, timeout=30
         )
         
-        if result.returncode != 0:
-            error_msg = result.stderr or result.stdout or "Gagal menjalankan spotdl"
-            if "rate/request limit" in error_msg.lower():
-                raise Exception("Spotify API rate limit tercapai. Silakan coba lagi nanti atau gunakan URL YouTube.")
-            raise Exception(f"Spotdl error: {error_msg.splitlines()[-1] if error_msg.splitlines() else error_msg}")
-        
         if not os.path.exists(save_path):
-            raise Exception("Spotdl tidak menghasilkan file metadata")
-        
+            raise Exception("Spotdl gagal mengambil metadata")
+            
         with open(save_path, "r", encoding="utf-8") as f:
             tracks = json.load(f)
         
-        # Bersihkan file sementara
         os.remove(save_path)
-        
-        if not tracks:
-            raise Exception("Tidak ada lagu yang ditemukan dari tautan Spotify ini")
-        
         is_playlist = is_spotify_playlist(url) or len(tracks) > 1
         
-        if is_playlist:
-            # Cari info playlist dari meta jika memungkinkan
-            title = "Spotify Playlist"
-            if tracks[0].get("list_name"):
-                title = tracks[0]["list_name"]
-            
-            return {
-                "title": f"{title} ({len(tracks)} lagu)",
-                "thumbnail": tracks[0].get("cover_url") if tracks else None,
-                "is_playlist": True,
-                "items_count": len(tracks)
-            }
-        else:
-            track = tracks[0]
-            artists = ", ".join(track.get("artists", ["Unknown Artist"]))
-            return {
-                "title": f"{artists} - {track.get('name', 'Unknown Title')}",
-                "thumbnail": track.get("cover_url"),
-                "is_playlist": False,
-                "items_count": 1
-            }
-    except subprocess.TimeoutExpired:
-        raise Exception("Waktu habis saat mengambil data dari Spotify (60 detik)")
+        return {
+            "title": tracks[0].get("name", "Unknown") if not is_playlist else "Spotify Playlist",
+            "thumbnail": tracks[0].get("cover_url"),
+            "is_playlist": is_playlist,
+            "items_count": len(tracks)
+        }
     except Exception as e:
-        if "rate limit" in str(e).lower():
-            raise e
         raise Exception(f"Gagal mengambil data dari Spotify: {str(e)}")
 
 
@@ -189,30 +187,79 @@ def _download_youtube_playlist(url: str, output_path: str, progress_callback=Non
 
 def _download_spotify(url: str, output_path: str, progress_callback=None):
     """
-    Download audio dari Spotify menggunakan spotdl v4.x.
+    Download Spotify menggunakan spotipy (untuk daftar lagu) + yt-dlp (untuk audio).
+    Ini menjamin lagu terpisah-pisah meskipun dalam album/playlist.
     """
-    process = subprocess.Popen(
-        [
-            "spotdl", "download", url,
-            "--output", f"{output_path}/{{title}} - {{artists}}.{{output-ext}}",
-            "--format", "mp3",
-            "--bitrate", "192k",
-            "--log-level", "INFO"
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
-    )
+    import spotipy
+    from spotipy.oauth2 import SpotifyClientCredentials
+    import os
 
-    for line in process.stdout:
-        if progress_callback:
-            match = re.search(r"(\d+)%", line)
-            if match:
-                try:
-                    progress_callback(float(match.group(1)))
-                except:
-                    pass
+    client_id = os.getenv("SPOTIPY_CLIENT_ID")
+    client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
+
+    # 1. Ambil daftar lagu (Search Queries)
+    queries = []
+    album_name = "Spotify Download"
     
-    process.wait()
-    if process.returncode != 0:
-        raise Exception(f"Download Spotify gagal dengan kode {process.returncode}")
+    try:
+        if client_id and client_secret:
+            print("DEBUG: Menggunakan kredensial Spotify untuk mengambil daftar lagu...", flush=True)
+            auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+            sp = spotipy.Spotify(auth_manager=auth_manager)
+            
+            if "track" in url:
+                track = sp.track(url)
+                queries.append(f"{track['artists'][0]['name']} - {track['name']}")
+            elif "album" in url:
+                results = sp.album_tracks(url)
+                album_name = sp.album(url)['name']
+                for item in results['items']:
+                    queries.append(f"{item['artists'][0]['name']} - {item['name']}")
+            elif "playlist" in url:
+                results = sp.playlist_tracks(url)
+                album_name = sp.playlist(url)['name']
+                for item in results['items']:
+                    track = item['track']
+                    queries.append(f"{track['artists'][0]['name']} - {track['name']}")
+        else:
+            # Fallback jika tidak ada kredensial (Hanya satu lagu dari OEmbed)
+            print("DEBUG: Tanpa kredensial, fallback ke OEmbed (Hanya 1 lagu)...", flush=True)
+            info = _get_spotify_info(url)
+            queries.append(info['title'])
+    except Exception as e:
+        print(f"DEBUG ERROR: Gagal mengambil daftar lagu via Spotipy: {e}", flush=True)
+        # Final fallback
+        info = _get_spotify_info(url)
+        queries.append(info['title'])
+
+    # 2. Download tiap lagu satu per satu
+    def ydl_hook(d):
+        if progress_callback and d['status'] == 'downloading':
+            p = d.get('_percent_str', '0%').replace('%','').strip()
+            try:
+                progress_callback(float(p))
+            except: pass
+
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': f"{output_path}/%(title)s.%(ext)s",
+        'progress_hooks': [ydl_hook],
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    print(f"DEBUG: Memulai unduhan {len(queries)} lagu secara terpisah...", flush=True)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        for i, q in enumerate(queries):
+            print(f"DEBUG: Mengunduh ({i+1}/{len(queries)}): {q}", flush=True)
+            try:
+                ydl.download([f"ytsearch1:{q} official audio"])
+            except Exception as e:
+                print(f"DEBUG ERROR: Gagal mengunduh {q}: {e}", flush=True)
+                
+    print(f"DEBUG: Semua proses selesai!", flush=True)

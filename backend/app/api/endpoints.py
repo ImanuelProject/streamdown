@@ -28,14 +28,14 @@ async def preview_url(request: PreviewRequest):
 async def start_download(request: DownloadRequest, req: Request):
     task_id = str(uuid.uuid4())
     
-    # 1. Daftarkan tugas ke antrean ARQ (Background Worker)
-    arq_pool = req.app.state.arq_pool
-    await arq_pool.enqueue_job("execute_download", request.url, request.is_playlist, task_id)
+    # Gunakan pool global dari app state
+    redis = req.app.state.arq_pool
     
-    # 2. Inisialisasi status pertama ke Redis menjadi QUEUED
-    redis_client = Redis.from_url(settings.REDIS_URL)
-    await set_task_status(redis_client, task_id, "QUEUED")
-    await redis_client.aclose()
+    # 1. Daftarkan tugas ke antrean ARQ
+    await redis.enqueue_job("execute_download", request.url, request.is_playlist, task_id)
+    
+    # 2. Inisialisasi status pertama ke Redis
+    await set_task_status(redis, task_id, "QUEUED")
     
     return DownloadResponse(
         task_id=task_id,
@@ -43,10 +43,10 @@ async def start_download(request: DownloadRequest, req: Request):
     )
 
 @router.get("/status/{task_id}", response_model=StatusResponse)
-async def get_status(task_id: str):
-    redis_client = Redis.from_url(settings.REDIS_URL)
-    status_data = await get_task_status(redis_client, task_id)
-    await redis_client.aclose()
+async def get_status(task_id: str, req: Request):
+    # Gunakan pool global dari app state
+    redis = req.app.state.arq_pool
+    status_data = await get_task_status(redis, task_id)
     
     if not status_data:
         raise HTTPException(status_code=404, detail="Task ID tidak ditemukan")
@@ -54,10 +54,10 @@ async def get_status(task_id: str):
     return StatusResponse(**status_data)
 
 @router.get("/stream/{task_id}")
-async def stream_file(task_id: str):
-    redis_client = Redis.from_url(settings.REDIS_URL)
-    status_data = await get_task_status(redis_client, task_id)
-    await redis_client.aclose()
+async def stream_file(task_id: str, req: Request):
+    # Gunakan pool global dari app state
+    redis = req.app.state.arq_pool
+    status_data = await get_task_status(redis, task_id)
     
     if not status_data or status_data.get("status") != "COMPLETED":
         raise HTTPException(status_code=400, detail="File belum selesai diproses")

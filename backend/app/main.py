@@ -7,10 +7,11 @@ from app.api import endpoints
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Menyambungkan FastAPI dengan Redis Pool milik ARQ saat aplikasi dinyalakan
+    # Membuat koneksi tunggal (Connection Pool) untuk Redis
+    # arq.create_pool secara otomatis mendukung operasi Redis standar
     app.state.arq_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
     yield
-    # Menutup koneksi dengan aman saat aplikasi dimatikan
+    # Menutup semua koneksi saat aplikasi dimatikan
     await app.state.arq_pool.close()
 
 app = FastAPI(
