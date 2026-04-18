@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -10,8 +8,9 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-    environment:
-      - REDIS_URL=redis://redis:6379/0
+      - ./data:/data
+    env_file:
+      - .env
     depends_on:
       - redis
 
@@ -20,12 +19,12 @@ services:
       context: ./backend
     container_name: streamdown_worker
     restart: always
-    command: python -m app.worker.main
+    command: arq app.worker.main.WorkerSettings
     volumes:
       - ./backend:/app
-      - ./data:/data  # For temporary files
-    environment:
-      - REDIS_URL=redis://redis:6379/0
+      - ./data:/data
+    env_file:
+      - .env
     depends_on:
       - redis
       - backend
@@ -40,7 +39,6 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    # Assuming development mode map for now
     command: npm run dev -- --host
 
   redis:
