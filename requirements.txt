@@ -1,3 +1,6 @@
 yt-dlp
 streamlit
+spotipy
 pathlib
+streamlit-lottie
+requests
