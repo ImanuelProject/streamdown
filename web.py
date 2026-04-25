@@ -108,15 +108,15 @@ with col_anim:
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🔍 SEARCH", "🔗 URL BATCH", "💚 SPOTIFY"])
 
-# Folder Download Sementara (Absolute Path)
-DOWNLOAD_DIR = Path(os.getcwd()) / "downloads"
+# Folder Download Sementara di /tmp (Lebih Stabil untuk Linux/Cloud)
+DOWNLOAD_DIR = Path("/tmp/downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 def process_download(query, is_search=False, engine="YouTube"):
     # Deteksi jika user paste URL di kotak search
     if is_search and query.startswith("http"):
         final_query = query
-        is_search = False # Perlakukan sebagai URL langsung
+        is_search = False
     elif is_search:
         final_query = f"ytsearch1:{query}" if engine == "YouTube" else f"scsearch1:{query}"
     else:
@@ -136,7 +136,12 @@ def process_download(query, is_search=False, engine="YouTube"):
             filters = []
             if normalize: filters.append("loudnorm=I=-14:LRA=7:tp=-2")
             if trim_silence: filters.append("silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,silenceremove=stop_periods=1:stop_silence=0.1:stop_threshold=-50dB")
-            if filters: cmd.extend(["--postprocessor-args", f"ffmpeg:-af {','.join(filters)}"])
+            
+            # Tambahkan -threads 1 untuk stabilitas di Cloud
+            if filters:
+                cmd.extend(["--postprocessor-args", f"ffmpeg:-af {','.join(filters)} -threads 1"])
+            else:
+                cmd.extend(["--postprocessor-args", "ffmpeg:-threads 1"])
             
             cmd.append(final_query)
             result = subprocess.run(cmd, capture_output=True, text=True)
