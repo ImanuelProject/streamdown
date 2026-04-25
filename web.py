@@ -2,74 +2,104 @@ import streamlit as st
 import main
 from pathlib import Path
 import os
-import shutil
+import subprocess
 
 # Konfigurasi Halaman
-st.set_page_config(page_title="STREAMDOWN Cloud", page_icon="🎵", layout="centered")
+st.set_page_config(page_title="STREAMDOWN PRO", page_icon="🎧", layout="wide")
 
-# CSS Kustom
+# CSS Kustom untuk Tampilan Pro DJ
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 20px; background-color: #ff4b4b; color: white; font-weight: bold; }
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; font-weight: bold; font-size: 18px; }
+    .main { background-color: #0e1117; }
+    .stButton>button { width: 100%; border-radius: 12px; height: 3.5em; background: linear-gradient(45deg, #ff4b4b, #ff7b7b); color: white; font-weight: bold; border: none; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎵 STREAMDOWN")
-st.caption("Music Downloader for Rekordbox (Cloud Version)")
+# Sidebar Settings
+with st.sidebar:
+    st.header("⚙️ Settings Pro")
+    audio_format = st.selectbox("Format Audio:", ["mp3", "wav", "flac"])
+    quality = st.select_slider("Kualitas Audio:", options=["LDR", "Standard", "High", "Ultra (Pro)"], value="Ultra (Pro)")
+    st.divider()
+    playlist_limit = st.number_input("Limit Playlist (Item):", min_value=1, value=50)
+    st.info("💡 Tip: Gunakan WAV/FLAC jika Anda ingin kualitas lossless tanpa kompresi.")
 
-# Inisialisasi System
-if 'ffmpeg_checked' not in st.session_state:
-    main.check_system()
-    st.session_state.ffmpeg_checked = True
+st.title("🎧 STREAMDOWN PRO")
+st.caption("The Ultimate Music Discovery & Downloader for DJs")
 
-# Tentukan folder download sementara di server
+tab1, tab2 = st.tabs(["🔍 Search & Download", "🔗 Direct URL / Batch"])
+
+# Folder Download Sementara
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-url = st.text_input("Masukkan URL YouTube atau SoundCloud:", placeholder="https://...")
+# Fungsi Helper Download
+def process_download(query, is_search=False):
+    # Bersihkan folder lama
+    for f in DOWNLOAD_DIR.glob("*"): 
+        if f.is_file(): f.unlink()
+    
+    # Jika search, tambahkan prefix ytsearch
+    final_query = f"ytsearch1:{query}" if is_search else query
+    
+    with st.status(f"Sedang memproses: {query}...", expanded=True) as status:
+        try:
+            # Kita modifikasi sedikit parameter cmd secara dinamis
+            # (Untuk kemudahan, kita panggil yt-dlp langsung di sini agar fleksibel dengan format)
+            cmd = [
+                *main.yt_dlp_cmd(),
+                "--extract-audio",
+                "--audio-format", audio_format,
+                "--audio-quality", "0",
+                "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+                "--no-playlist" if not is_playlist else "--playlist-items", f"1-{playlist_limit}",
+                "--add-metadata", "--embed-thumbnail",
+                final_query
+            ]
+            
+            subprocess.run(cmd, check=True)
+            status.update(label="✅ Selesai!", state="complete")
+            
+            # Tampilkan Preview & Download
+            files = list(DOWNLOAD_DIR.glob(f"*.{audio_format}"))
+            if files:
+                for file_path in files:
+                    st.write(f"🎵 **{file_path.name}**")
+                    st.audio(str(file_path)) # PREVIEW PLAYER
+                    with open(file_path, "rb") as f:
+                        st.download_button(
+                            label=f"💾 Download {file_path.name}",
+                            data=f,
+                            file_name=file_path.name,
+                            mime=f"audio/{audio_format}"
+                        )
+                st.balloons()
+            else:
+                st.error("File tidak ditemukan.")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-# Deteksi Playlist
-is_playlist = any(x in url.lower() for x in ["playlist", "album", "sets", "list="])
-items = None
-if is_playlist:
-    limit_toggle = st.checkbox("Batasi jumlah lagu?")
-    if limit_toggle:
-        items = st.number_input("Berapa lagu?", min_value=1, value=10, step=1)
+# TAB 1: SEARCH
+with tab1:
+    search_query = st.text_input("Cari judul lagu, artis, atau remix:", placeholder="Contoh: Raingurl Ekany Remix")
+    if st.button("CARI & DOWNLOAD"):
+        if search_query:
+            is_playlist = False
+            process_download(search_query, is_search=True)
 
-if st.button("PROSES DOWNLOAD"):
-    if url:
-        with st.status("Sedang diproses oleh server...", expanded=True) as status:
-            try:
-                # Bersihkan folder download sebelumnya agar tidak penuh
-                for f in DOWNLOAD_DIR.glob("*"):
-                    if f.is_file(): f.unlink()
-                
-                # Jalankan download ke folder sementara di server
-                main.download_audio(url, str(DOWNLOAD_DIR), items=items)
-                
-                status.update(label="✅ Berhasil Diproses!", state="complete")
-                st.success("Lagu sudah siap didownload ke perangkat Anda!")
-                
-                # Cari file yang baru didownload
-                downloaded_files = list(DOWNLOAD_DIR.glob("*.mp3")) + list(DOWNLOAD_DIR.glob("*.m4a"))
-                
-                if downloaded_files:
-                    for file_path in downloaded_files:
-                        with open(file_path, "rb") as f:
-                            st.download_button(
-                                label=f"💾 SIMPAN KE PERANGKAT: {file_path.name}",
-                                data=f,
-                                file_name=file_path.name,
-                                mime="audio/mpeg"
-                            )
-                    st.balloons()
-                else:
-                    st.warning("File tidak ditemukan. Coba lagi.")
-                    
-            except Exception as e:
-                st.error(f"Error: {e}")
-    else:
-        st.warning("Masukkan URL dulu!")
+# TAB 2: DIRECT URL / BATCH
+with tab2:
+    urls = st.text_area("Masukkan URL (Satu link per baris untuk Batch Download):", placeholder="https://youtube.com/...\nhttps://soundcloud.com/...")
+    if st.button("PROSES SEMUA LINK"):
+        if urls:
+            url_list = [u.strip() for u in urls.split("\n") if u.strip()]
+            for single_url in url_list:
+                is_playlist = any(x in single_url.lower() for x in ["playlist", "album", "sets", "list="])
+                process_download(single_url)
+        else:
+            st.warning("Masukkan link dulu!")
 
 st.divider()
-st.info("💡 Petunjuk: Setelah proses selesai, klik tombol 'SIMPAN KE PERANGKAT' untuk mendownload file ke Mac/HP Anda.")
+st.markdown("<center><small>STREAMDOWN v2.0 Pro • Built for DJs</small></center>", unsafe_allow_html=True)
