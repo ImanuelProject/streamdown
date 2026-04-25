@@ -35,75 +35,121 @@ def print_banner():
     print(f"{Style.RESET}{Style.CYAN}  Premium Music Downloader • YouTube & SoundCloud{Style.RESET}\n")
 
 # ─── Dependency Management ────────────────────────────────────────
-FFMPEG_EXE = "ffmpeg"
+FFMPEG_LOCATION = None
+FFMPEG_AVAILABLE = False
+
+def yt_dlp_cmd():
+    return [sys.executable, "-m", "yt_dlp"]
+
+def can_run_binary(command):
+    try:
+        subprocess.run(
+            command,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return False
 
 def find_ffmpeg():
-    global FFMPEG_EXE
     # 1. Check System PATH
-    if shutil.which("ffmpeg"):
-        return "ffmpeg"
-    
-    # 2. Check Local Directory
-    local_ffmpeg = Path.cwd() / "ffmpeg.exe"
-    if local_ffmpeg.exists():
-        return str(local_ffmpeg)
-    
-    # 3. Check Downloads Folder (Auto-Fix)
-    downloads = Path.home() / "Downloads"
-    for exe in downloads.rglob("ffmpeg.exe"):
-        log_info(f"Ditemukan ffmpeg.exe di Downloads: {exe.parent}")
-        return str(exe)
-        
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return str(Path(system_ffmpeg).parent)
+
+    # 2. Check local paths
+    local_candidates = [
+        Path.cwd(),
+        Path.cwd() / "ffmpeg" / "bin",
+        Path.cwd() / "ffmpeg",
+    ]
+    for directory in local_candidates:
+        ffmpeg_exe = directory / "ffmpeg.exe"
+        ffprobe_exe = directory / "ffprobe.exe"
+        if ffmpeg_exe.exists() and ffprobe_exe.exists():
+            return str(directory)
+
     return None
 
 def check_system():
-    global FFMPEG_EXE
+    global FFMPEG_LOCATION, FFMPEG_AVAILABLE
     print_banner()
     log_info("Memeriksa dependensi...")
 
     # Check yt-dlp
     try:
-        subprocess.run(["yt-dlp", "--version"], capture_output=True, check=True)
+        subprocess.run(yt_dlp_cmd() + ["--version"], capture_output=True, check=True)
         log_ok("yt-dlp siap.")
-    except:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         log_warn("Menginstall yt-dlp...")
         subprocess.run([sys.executable, "-m", "pip", "install", "yt-dlp", "-q"], check=True)
         log_ok("yt-dlp terinstal.")
 
     # Check FFmpeg
-    found = find_ffmpeg()
-    if found:
-        FFMPEG_EXE = found
-        log_ok(f"FFmpeg siap ({'System' if found=='ffmpeg' else 'Local/Found'})")
+    found_dir = find_ffmpeg()
+    if found_dir:
+        ffmpeg_exe = str(Path(found_dir) / "ffmpeg.exe")
+        ffprobe_exe = str(Path(found_dir) / "ffprobe.exe")
+        
+        if can_run_binary([ffmpeg_exe, "-version"]) and can_run_binary([ffprobe_exe, "-version"]):
+            FFMPEG_LOCATION = found_dir
+            FFMPEG_AVAILABLE = True
+            log_ok(f"FFmpeg siap di: {FFMPEG_LOCATION}")
+        else:
+            FFMPEG_AVAILABLE = False
+            log_warn("FFmpeg ditemukan tapi tidak bisa dijalankan (cek izin Windows).")
     else:
-        log_err("FFmpeg tidak ditemukan!")
-        print(f"\n{Style.YELLOW}Solusi Cepat:{Style.RESET}")
-        print("1. Download zip dari: https://github.com/BtbN/FFmpeg-Builds/releases")
-        print("2. Ambil 'ffmpeg.exe' dari dalam folder 'bin'.")
-        print(f"3. Letakkan di folder ini: {os.getcwd()}\n")
-        sys.exit(1)
+        FFMPEG_AVAILABLE = False
+        log_warn("FFmpeg tidak ditemukan. Hasil download mungkin bukan MP3.")
 
 # ─── Downloader Logic ─────────────────────────────────────────────
-def download_audio(url, output_path):
-    log_info(f"Memulai download: {url}")
+def download_audio(url, output_path, items=None):
+    if not FFMPEG_AVAILABLE:
+        log_warn("Peringatan: FFmpeg tidak aktif. File mungkin tidak support Rekordbox!")
     
+    log_info(f"Memulai download: {url}")
+
+    # Template nama file: "Artis - Judul.mp3" (Sangat disukai DJ agar rapi)
     cmd = [
-        "yt-dlp",
-        "--extract-audio",
-        "--audio-format", "mp3",
-        "--audio-quality", "0",
-        "--ffmpeg-location", FFMPEG_EXE,
-        "--output", f"{output_path}/%(title)s.%(ext)s",
-        "--add-metadata",
-        "--embed-thumbnail",
-        url
+        *yt_dlp_cmd(), 
+        "--output", f"{output_path}/%(artist,uploader)s - %(title)s.%(ext)s",
+        "--no-mtime", # Agar file date adalah waktu download, memudahkan sorting 'Date Added'
+        "--download-archive", f"{output_path}/archive.txt", # CATATAN: Skip lagu yang sudah pernah didownload
+        "--no-overwrites" # Jangan timpa file jika sudah ada di folder
     ]
+
+    # Fitur Playlist Limit
+    if items:
+        cmd.extend(["--playlist-items", f"1-{items}"])
+
+    if FFMPEG_AVAILABLE and FFMPEG_LOCATION:
+        cmd.extend(
+            [
+                "--extract-audio",
+                "--audio-format", "mp3",
+                "--audio-quality", "0",
+                "--ffmpeg-location", FFMPEG_LOCATION,
+                "--add-metadata",
+                "--embed-thumbnail",
+                "--embed-chapters", # Berguna untuk melihat struktur lagu (Intro/Drop) di beberapa player
+                "--metadata-from-title", "%(artist)s - %(title)s", # Coba ekstrak artis dari judul
+            ]
+        )
+    else:
+        # Fall back to the source audio file when FFmpeg cannot run.
+        cmd.extend(["--format", "bestaudio/best"])
+
+    cmd.append(url)
     
     try:
         subprocess.run(cmd, check=True)
-        print(f"\n{Style.GREEN}{Style.BOLD}✔ BERHASIL!{Style.RESET} Cek folder Music Anda.")
+        print(f"\n{Style.GREEN}{Style.BOLD}✔ SELESAI!{Style.RESET} Lagu siap di-import ke Rekordbox.")
     except subprocess.CalledProcessError:
         log_err("Gagal mendownload. Pastikan URL benar.")
+    except OSError as exc:
+        log_err(f"Gagal menjalankan downloader: {exc}")
 
 # ─── Main Menu ────────────────────────────────────────────────────
 def main():
@@ -113,7 +159,7 @@ def main():
 
     while True:
         print(f"\n{Style.BOLD}[ MENU ]{Style.RESET}")
-        print("1. Download Lagu (YouTube/SoundCloud)")
+        print("1. Download Lagu/Playlist (YouTube/SoundCloud)")
         print("2. Keluar")
         
         choice = input(f"\nPilih [1-2]: ").strip()
@@ -121,7 +167,16 @@ def main():
         if choice == "1":
             url = input(f"Masukkan URL: ").strip()
             if url:
-                download_audio(url, str(music_dir))
+                # Deteksi playlist yang lebih kuat (YouTube 'list=' dan SoundCloud '/sets/')
+                is_playlist = any(x in url.lower() for x in ["playlist", "album", "sets", "list="])
+                
+                if is_playlist:
+                    limit = input(f"Playlist/Set terdeteksi. Berapa lagu mau didownload? (Kosongkan untuk semua): ").strip()
+                    items = int(limit) if limit.isdigit() else None
+                else:
+                    items = None
+                
+                download_audio(url, str(music_dir), items=items)
         elif choice == "2":
             print(f"{Style.PURPLE}Sampai jumpa!{Style.RESET}")
             break
