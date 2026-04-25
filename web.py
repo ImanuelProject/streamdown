@@ -68,7 +68,9 @@ def process_download(query, is_search=False, engine="YouTube", is_playlist_mode=
         try:
             cmd = [*main.yt_dlp_cmd(), "--extract-audio", "--audio-format", audio_format, "--audio-quality", "0", 
                    "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--restrict-filenames",
-                   "--add-metadata", "--embed-thumbnail"]
+                   "--add-metadata", "--embed-thumbnail",
+                   "--concurrent-fragments", "5", # Download 1 lagu pakai 5 jalur
+                   "--concurrent-downloads", "3"] # Download 3 lagu sekaligus dalam playlist
             
             # Logika Playlist Otomatis
             if is_playlist_mode or any(x in query.lower() for x in ["playlist", "album", "sets", "list="]):
