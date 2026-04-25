@@ -42,7 +42,7 @@ with st.sidebar:
     st.markdown("### 🔑 SPOTIFY KEYS")
     sp_id = st.text_input("ID", type="password")
     sp_secret = st.text_input("SECRET", type="password")
-    playlist_limit = st.number_input("LIMIT", min_value=1, value=50)
+    playlist_limit = st.number_input("PLAYLIST LIMIT", min_value=1, value=50, help="Maksimal lagu yang diambil dari satu playlist")
 
 # MAIN CONTENT
 col_t, col_a = st.columns([2, 1])
@@ -55,7 +55,7 @@ with col_a:
 DOWNLOAD_DIR = Path("/tmp/downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-def process_download(query, is_search=False, engine="YouTube", show_preview=True):
+def process_download(query, is_search=False, engine="YouTube", is_playlist_mode=False):
     if is_search and query.startswith("http"):
         final_query = query
         is_search = False
@@ -66,18 +66,17 @@ def process_download(query, is_search=False, engine="YouTube", show_preview=True
     
     with st.status(f"⚡ Processing: {query}", expanded=is_search) as status:
         try:
-            # Perintah Dasar (Tanpa Filter Tambahan)
             cmd = [*main.yt_dlp_cmd(), "--extract-audio", "--audio-format", audio_format, "--audio-quality", "0", 
                    "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--restrict-filenames",
                    "--add-metadata", "--embed-thumbnail"]
             
-            if any(x in query.lower() for x in ["playlist", "album", "sets", "list="]):
+            # Logika Playlist Otomatis
+            if is_playlist_mode or any(x in query.lower() for x in ["playlist", "album", "sets", "list="]):
                 cmd.extend(["--playlist-items", f"1-{playlist_limit}"])
             else:
                 cmd.append("--no-playlist")
             
             cmd.append(final_query)
-            
             result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode != 0:
@@ -86,35 +85,31 @@ def process_download(query, is_search=False, engine="YouTube", show_preview=True
                 status.update(label="❌ Failed", state="error")
                 return False
             
-            status.update(label=f"✅ Done: {query}", state="complete")
+            status.update(label=f"✅ Done!", state="complete")
             return True
         except Exception as e:
             st.error(f"Error: {e}")
             return False
 
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-tab1, tab2, tab3 = st.tabs(["🔍 SEARCH", "🔗 BATCH URL", "💚 SPOTIFY"])
+tab1, tab2, tab3 = st.tabs(["🔍 SEARCH SINGLE", "📜 PLAYLIST / ALBUM", "💚 SPOTIFY SYNC"])
 
 with tab1:
     col_s, col_e = st.columns([3, 1])
-    with col_s: s_query = st.text_input("Find Song:", placeholder="Artist - Title")
+    with col_s: s_query = st.text_input("Find One Song:", placeholder="Artist - Title")
     with col_e: s_engine = st.selectbox("SOURCE", ["YouTube", "SoundCloud"])
-    if st.button("🔥 HUNT SINGLE"):
+    if st.button("🔥 HUNT SONG"):
         if s_query:
             for f in DOWNLOAD_DIR.glob("*"): f.unlink()
-            process_download(s_query, is_search=True, engine=s_engine, show_preview=True)
+            process_download(s_query, is_search=True, engine=s_engine)
 
 with tab2:
-    urls = st.text_area("Paste Multiple URLs (One per line):")
-    if st.button("⚡ EXECUTE BATCH"):
-        if urls:
+    p_url = st.text_input("Paste Playlist / Album / Set URL:", placeholder="Link YouTube Playlist atau SoundCloud Set")
+    if st.button("⚡ DOWNLOAD ALL FROM PLAYLIST"):
+        if p_url:
             for f in DOWNLOAD_DIR.glob("*"): f.unlink()
-            url_list = [u.strip() for u in urls.split("\n") if u.strip()]
-            progress_bar = st.progress(0)
-            for i, u in enumerate(url_list):
-                process_download(u, show_preview=False)
-                progress_bar.progress((i + 1) / len(url_list))
-            st.success(f"Batch Done! {len(url_list)} items processed.")
+            process_download(p_url, is_playlist_mode=True)
+            st.success("Playlist processing finished! Check the vault below.")
 
 with tab3:
     sp_url = st.text_input("Spotify Playlist URL:")
@@ -129,7 +124,7 @@ with tab3:
                 tracks = sp.playlist_items(sp_url)['items']
                 progress_bar = st.progress(0)
                 for i, item in enumerate(tracks):
-                    process_download(f"{item['track']['artists'][0]['name']} - {item['track']['name']}", is_search=True, show_preview=False)
+                    process_download(f"{item['track']['artists'][0]['name']} - {item['track']['name']}", is_search=True)
                     progress_bar.progress((i + 1) / len(tracks))
             except Exception as e: st.error(f"Failed: {e}")
 st.markdown('</div>', unsafe_allow_html=True)
@@ -154,5 +149,5 @@ if files:
         for f in DOWNLOAD_DIR.glob("*"): f.unlink()
         st.rerun()
 else:
-    st.info("Vault is empty. Hunting time! 🎧")
+    st.info("Vault is empty. Hunt some tracks or playlists! 🎧")
 st.markdown('</div>', unsafe_allow_html=True)
