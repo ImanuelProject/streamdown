@@ -77,7 +77,8 @@ st.markdown("""
 
 # 3. SIDEBAR (GLASS UI)
 with st.sidebar:
-    st_lottie(lottie_dj, height=150, key="sidebar_dj")
+    if lottie_dj:
+        st_lottie(lottie_dj, height=150, key="sidebar_dj")
     st.markdown("<h2 style='text-align: center;'>⚙️ CONTROL</h2>", unsafe_allow_html=True)
     
     audio_format = st.selectbox("FORMAT", ["mp3", "wav", "flac"])
@@ -101,7 +102,8 @@ with col_title:
     st.markdown("<p style='font-size: 18px; opacity: 0.8;'>Engineered for Professional DJs & Music Curators.</p>", unsafe_allow_html=True)
 
 with col_anim:
-    st_lottie(lottie_dj, height=200, key="main_dj")
+    if lottie_dj:
+        st_lottie(lottie_dj, height=200, key="main_dj")
 
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🔍 SEARCH", "🔗 URL BATCH", "💚 SPOTIFY"])
