@@ -108,12 +108,11 @@ with col_anim:
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🔍 SEARCH", "🔗 URL BATCH", "💚 SPOTIFY"])
 
-# Folder Download Sementara di /tmp (Lebih Stabil untuk Linux/Cloud)
-DOWNLOAD_DIR = Path("/tmp/downloads")
+# Folder Download Sementara (Kembali ke Lokal untuk Test)
+DOWNLOAD_DIR = Path(os.getcwd()) / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 def process_download(query, is_search=False, engine="YouTube"):
-    # Deteksi jika user paste URL di kotak search
     if is_search and query.startswith("http"):
         final_query = query
         is_search = False
@@ -124,26 +123,13 @@ def process_download(query, is_search=False, engine="YouTube"):
     
     with st.status(f"⚡ Processing: {query}", expanded=True) as status:
         try:
+            # SAFE MODE: Tanpa Metadata & Thumbnail dulu untuk tes
             cmd = [*main.yt_dlp_cmd(), "--extract-audio", "--audio-format", audio_format, "--audio-quality", "0", 
-                   "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--add-metadata", "--embed-thumbnail",
-                   "--restrict-filenames"] # Tambahkan ini agar nama file aman
+                   "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--restrict-filenames",
+                   "--no-playlist" if not any(x in query.lower() for x in ["playlist", "album", "sets", "list="]) else "--playlist-items", f"1-{playlist_limit}"]
             
-            # Perbaikan Logika Playlist
-            if any(x in query.lower() for x in ["playlist", "album", "sets", "list="]):
-                cmd.extend(["--playlist-items", f"1-{playlist_limit}"])
-            else:
-                cmd.append("--no-playlist")
-            
-            filters = []
-            if normalize: filters.append("loudnorm=I=-14:LRA=7:tp=-2")
-            if trim_silence: filters.append("silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,silenceremove=stop_periods=1:stop_silence=0.1:stop_threshold=-50dB")
-            
-            # Gabungkan semua argumen FFmpeg menjadi satu agar tidak konflik
-            pp_args = ["-threads", "1"]
-            if filters:
-                pp_args.extend(["-af", ",".join(filters)])
-            
-            cmd.extend(["--postprocessor-args", f"ffmpeg:{' '.join(pp_args)}"])
+            # Matikan semua argumen tambahan dulu
+            # cmd.extend(["--postprocessor-args", "ffmpeg:-threads 1"])
             
             cmd.append(final_query)
             result = subprocess.run(cmd, capture_output=True, text=True)
