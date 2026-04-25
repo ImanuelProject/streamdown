@@ -39,9 +39,6 @@ with st.sidebar:
     st.markdown("<h2 style='text-align: center;'>⚙️ CONTROL</h2>", unsafe_allow_html=True)
     audio_format = st.selectbox("FORMAT", ["mp3", "wav", "flac"])
     st.divider()
-    normalize = st.toggle("LOUDNESS NORMALIZATION", value=True)
-    trim_silence = st.toggle("AUTO-TRIM SILENCE", value=True)
-    st.divider()
     st.markdown("### 🔑 SPOTIFY KEYS")
     sp_id = st.text_input("ID", type="password")
     sp_secret = st.text_input("SECRET", type="password")
@@ -69,7 +66,7 @@ def process_download(query, is_search=False, engine="YouTube", show_preview=True
     
     with st.status(f"⚡ Processing: {query}", expanded=is_search) as status:
         try:
-            # Perintah Dasar (Restricted filenames untuk keamanan)
+            # Perintah Dasar (Tanpa Filter Tambahan)
             cmd = [*main.yt_dlp_cmd(), "--extract-audio", "--audio-format", audio_format, "--audio-quality", "0", 
                    "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--restrict-filenames",
                    "--add-metadata", "--embed-thumbnail"]
@@ -79,14 +76,6 @@ def process_download(query, is_search=False, engine="YouTube", show_preview=True
             else:
                 cmd.append("--no-playlist")
             
-            # Gabungkan Filter
-            pp_args = ["-threads", "1"]
-            filters = []
-            if normalize: filters.append("loudnorm=I=-14:LRA=7:tp=-2")
-            if trim_silence: filters.append("silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,silenceremove=stop_periods=1:stop_silence=0.1:stop_threshold=-50dB")
-            if filters: pp_args.extend(["-af", ",".join(filters)])
-            
-            cmd.extend(["--postprocessor-args", f"ffmpeg:{' '.join(pp_args)}"])
             cmd.append(final_query)
             
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -119,7 +108,7 @@ with tab2:
     urls = st.text_area("Paste Multiple URLs (One per line):")
     if st.button("⚡ EXECUTE BATCH"):
         if urls:
-            for f in DOWNLOAD_DIR.glob("*"): f.unlink() # Bersihkan sekali di awal
+            for f in DOWNLOAD_DIR.glob("*"): f.unlink()
             url_list = [u.strip() for u in urls.split("\n") if u.strip()]
             progress_bar = st.progress(0)
             for i, u in enumerate(url_list):
@@ -160,7 +149,7 @@ if files:
             st.write(f"🎵 {f_path.name}")
             st.audio(str(f_path))
             with open(f_path, "rb") as f:
-                st.download_button(f"SAVE {f_path.name[:20]}...", f, file_name=f_path.name, mime=f"audio/{audio_format}")
+                st.download_button(f"SAVE {f_path.name[:20]}...", f, file_name=f_path.name, mime=f"audio/{audio_format}", key=f_path.name)
     if st.button("🗑️ CLEAR VAULT"):
         for f in DOWNLOAD_DIR.glob("*"): f.unlink()
         st.rerun()
