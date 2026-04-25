@@ -117,8 +117,13 @@ def process_download(query, is_search=False, engine="YouTube"):
     with st.status(f"⚡ Processing: {query}", expanded=False) as status:
         try:
             cmd = [*main.yt_dlp_cmd(), "--extract-audio", "--audio-format", audio_format, "--audio-quality", "0", 
-                   "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--add-metadata", "--embed-thumbnail",
-                   "--no-playlist" if "playlist" not in query.lower() else "--playlist-items", f"1-{playlist_limit}"]
+                   "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--add-metadata", "--embed-thumbnail"]
+            
+            # Perbaikan Logika Playlist
+            if any(x in query.lower() for x in ["playlist", "album", "sets", "list="]):
+                cmd.extend(["--playlist-items", f"1-{playlist_limit}"])
+            else:
+                cmd.append("--no-playlist")
             
             filters = []
             if normalize: filters.append("loudnorm=I=-14:LRA=7:tp=-2")
