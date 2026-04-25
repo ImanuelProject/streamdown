@@ -108,13 +108,21 @@ with col_anim:
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🔍 SEARCH", "🔗 URL BATCH", "💚 SPOTIFY"])
 
-DOWNLOAD_DIR = Path("downloads")
+# Folder Download Sementara (Absolute Path)
+DOWNLOAD_DIR = Path(os.getcwd()) / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 def process_download(query, is_search=False, engine="YouTube"):
-    final_query = f"ytsearch1:{query}" if is_search and engine == "YouTube" else (f"scsearch1:{query}" if is_search else query)
+    # Deteksi jika user paste URL di kotak search
+    if is_search and query.startswith("http"):
+        final_query = query
+        is_search = False # Perlakukan sebagai URL langsung
+    elif is_search:
+        final_query = f"ytsearch1:{query}" if engine == "YouTube" else f"scsearch1:{query}"
+    else:
+        final_query = query
     
-    with st.status(f"⚡ Processing: {query}", expanded=False) as status:
+    with st.status(f"⚡ Processing: {query}", expanded=True) as status:
         try:
             cmd = [*main.yt_dlp_cmd(), "--extract-audio", "--audio-format", audio_format, "--audio-quality", "0", 
                    "--output", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s", "--add-metadata", "--embed-thumbnail"]
@@ -167,9 +175,11 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 # 5. RESULTS AREA
 files = list(DOWNLOAD_DIR.glob(f"*.{audio_format}"))
+st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+st.markdown(f"### 📦 VAULT")
+
 if files:
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.markdown(f"### 📦 VAULT ({len(files)} tracks ready)")
+    st.markdown(f"**{len(files)} tracks ready for your Rekordbox library!**")
     
     # ZIP BUTTON
     zip_buffer = io.BytesIO()
@@ -188,6 +198,9 @@ if files:
     if st.button("🗑️ CLEAR VAULT"):
         for f in DOWNLOAD_DIR.glob("*"): f.unlink()
         st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+else:
+    st.info("Your vault is currently empty. Start hunting some tracks above! 🎧")
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<center style='opacity: 0.5;'>STREAMDOWN v3.0 • Premium DJ Workstation</center>", unsafe_allow_html=True)
