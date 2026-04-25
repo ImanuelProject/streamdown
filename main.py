@@ -20,19 +20,34 @@ class Style:
     BOLD   = "\033[1m"
     RESET  = "\033[0m"
 
-def log_ok(msg):    print(f"{Style.GREEN} ✔ {Style.RESET} {msg}")
-def log_warn(msg):  print(f"{Style.YELLOW} ⚠ {Style.RESET} {msg}")
-def log_err(msg):   print(f"{Style.RED} ✘ {Style.RESET} {msg}")
-def log_info(msg):  print(f"{Style.CYAN} ℹ {Style.RESET} {msg}")
+def log_ok(msg):
+    try: print(f"{Style.GREEN} ✔ {Style.RESET} {msg}")
+    except: print(f"[OK] {msg}")
+
+def log_warn(msg):
+    try: print(f"{Style.YELLOW} ⚠ {Style.RESET} {msg}")
+    except: print(f"[!] {msg}")
+
+def log_err(msg):
+    try: print(f"{Style.RED} ✘ {Style.RESET} {msg}")
+    except: print(f"[X] {msg}")
+
+def log_info(msg):
+    try: print(f"{Style.CYAN} ℹ {Style.RESET} {msg}")
+    except: print(f"[i] {msg}")
 
 def print_banner():
-    print(f"{Style.PURPLE}{Style.BOLD}")
-    print("  ███████╗████████╗██████╗ ███████╗ █████╗ ███╗   ███╗")
-    print("  ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██╔══██╗████╗ ████║")
-    print("  ███████╗   ██║   ██████╔╝█████╗  ███████║██╔████╔██║")
-    print("  ╚════██║   ██║   ██╔══██╗██╔══╝  ██╔══██║██║╚██╔╝██║")
-    print("  ███████║   ██║   ██║  ██║███████╗██║  ██║██║ ╚═╝ ██║")
-    print(f"{Style.RESET}{Style.CYAN}  Premium Music Downloader • YouTube & SoundCloud{Style.RESET}\n")
+    try:
+        print(f"{Style.PURPLE}{Style.BOLD}")
+        print("  ███████╗████████╗██████╗ ███████╗ █████╗ ███╗   ███╗")
+        print("  ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██╔══██╗████╗ ████║")
+        print("  ███████╗   ██║   ██████╔╝█████╗  ███████║██╔████╔██║")
+        print("  ╚════██║   ██║   ██╔══██╗██╔══╝  ██╔══██║██║╚██╔╝██║")
+        print("  ███████║   ██║   ██║  ██║███████╗██║  ██║██║ ╚═╝ ██║")
+        print(f"{Style.RESET}{Style.CYAN}  Premium Music Downloader • YouTube & SoundCloud{Style.RESET}\n")
+    except UnicodeEncodeError:
+        # Fallback jika terminal tidak support karakter blok (biasanya di .exe)
+        print("\n--- STREAMDOWN - Premium Music Downloader ---\n")
 
 # ─── Dependency Management ────────────────────────────────────────
 FFMPEG_LOCATION = None
@@ -54,20 +69,28 @@ def can_run_binary(command):
         return False
 
 def find_ffmpeg():
-    # 1. Check System PATH
+    # 0. Check PyInstaller temporary folder (Jika dibundel jadi .exe)
+    if getattr(sys, 'frozen', False):
+        bundle_dir = sys._MEIPASS
+        ext = ".exe" if os.name == "nt" else ""
+        if (Path(bundle_dir) / f"ffmpeg{ext}").exists():
+            return bundle_dir
+
+    # 1. Check System PATH (Terbaik untuk Mac via Homebrew)
     system_ffmpeg = shutil.which("ffmpeg")
     if system_ffmpeg:
         return str(Path(system_ffmpeg).parent)
 
     # 2. Check local paths
+    ext = ".exe" if os.name == "nt" else ""
     local_candidates = [
         Path.cwd(),
         Path.cwd() / "ffmpeg" / "bin",
         Path.cwd() / "ffmpeg",
     ]
     for directory in local_candidates:
-        ffmpeg_exe = directory / "ffmpeg.exe"
-        ffprobe_exe = directory / "ffprobe.exe"
+        ffmpeg_exe = directory / f"ffmpeg{ext}"
+        ffprobe_exe = directory / f"ffprobe{ext}"
         if ffmpeg_exe.exists() and ffprobe_exe.exists():
             return str(directory)
 
@@ -90,8 +113,9 @@ def check_system():
     # Check FFmpeg
     found_dir = find_ffmpeg()
     if found_dir:
-        ffmpeg_exe = str(Path(found_dir) / "ffmpeg.exe")
-        ffprobe_exe = str(Path(found_dir) / "ffprobe.exe")
+        ext = ".exe" if os.name == "nt" else ""
+        ffmpeg_exe = str(Path(found_dir) / f"ffmpeg{ext}")
+        ffprobe_exe = str(Path(found_dir) / f"ffprobe{ext}")
         
         if can_run_binary([ffmpeg_exe, "-version"]) and can_run_binary([ffprobe_exe, "-version"]):
             FFMPEG_LOCATION = found_dir
@@ -99,10 +123,10 @@ def check_system():
             log_ok(f"FFmpeg siap di: {FFMPEG_LOCATION}")
         else:
             FFMPEG_AVAILABLE = False
-            log_warn("FFmpeg ditemukan tapi tidak bisa dijalankan (cek izin Windows).")
+            log_warn("FFmpeg ditemukan tapi tidak bisa dijalankan.")
     else:
         FFMPEG_AVAILABLE = False
-        log_warn("FFmpeg tidak ditemukan. Hasil download mungkin bukan MP3.")
+        log_warn("FFmpeg tidak ditemukan. Silakan instal via Homebrew (Mac) atau taruh di folder project.")
 
 # ─── Downloader Logic ─────────────────────────────────────────────
 def download_audio(url, output_path, items=None):

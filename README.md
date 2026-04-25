@@ -1,52 +1,55 @@
-# 🎵 STREAMDOWN - Premium Music Downloader
+# 🎵 STREAMDOWN - Premium Music Downloader (Terminal Edition)
 
-**STREAMDOWN** adalah aplikasi berbasis terminal (CLI) yang memungkinkan Anda mendownload audio berkualitas tinggi (MP3 320kbps) dari YouTube dan SoundCloud dengan mudah. Aplikasi ini secara otomatis menyematkan metadata (judul, artis) dan thumbnail ke dalam file audio.
+**STREAMDOWN** adalah aplikasi terminal (CLI) premium yang dirancang khusus untuk DJ dan pecinta musik yang ingin membangun library berkualitas tinggi. Mendownload audio dari YouTube & SoundCloud dengan format yang sudah dioptimalkan untuk **Rekordbox**.
 
 ## ✨ Fitur Utama
-- 🚀 **High Speed Download**: Menggunakan engine `yt-dlp` yang sangat cepat.
-- 🎧 **High Quality Audio**: Konversi otomatis ke format MP3 kualitas terbaik.
-- 🖼️ **Auto Metadata**: Menyematkan gambar album dan informasi lagu secara otomatis.
-- 📂 **Auto Organize**: Hasil download tersimpan rapi di folder `Music/Streamdown`.
-- 🛠️ **Smart Dependency**: Deteksi otomatis FFmpeg di folder lokal maupun PATH.
+- 🎧 **Rekordbox Ready**: Hasil download berupa MP3 kualitas terbaik (VBR 0 / ~320kbps).
+- 🏷️ **Pro Metadata**: Otomatis menyematkan Judul, Artis, Album Art, dan Chapters.
+- 📂 **DJ-Friendly Naming**: Format nama file otomatis `Artis - Judul.mp3`.
+- 🔄 **Smart Auto-Skip**: Menggunakan sistem *Archive*, lagu yang sudah ada tidak akan didownload ulang.
+- 📜 **Playlist Support**: Bisa mendownload seluruh playlist/album dengan opsi limit jumlah lagu.
+- 🍏 **Cross-Platform**: Berjalan mulus di **Windows** maupun **macOS**.
 
 ## 📋 Persyaratan Sistem
-1. **Python 3.7+**
-2. **FFmpeg** (Diperlukan untuk konversi audio)
+1. **Python 3.8+**
+2. **FFmpeg** (Wajib untuk konversi MP3 & Metadata)
 
-## 🚀 Cara Instalasi (Setup)
+## 🚀 Cara Instalasi & Setup
 
-### Langkah 1: Clone atau Download Project
-Pastikan Anda berada di folder project `streamdown`.
+### **Untuk Windows**
+1. Taruh file `ffmpeg.exe` dan `ffprobe.exe` langsung di dalam folder project ini.
+2. Jalankan di PowerShell:
+   ```powershell
+   python main.py
+   ```
 
-### Langkah 2: Instalasi Library Python
-Jalankan perintah berikut di terminal/PowerShell:
-```powershell
-pip install yt-dlp
-```
-
-### Langkah 3: Setup FFmpeg (Penting!)
-FFmpeg diperlukan agar aplikasi bisa merubah video menjadi MP3.
-1. Download FFmpeg dari [Gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip).
-2. Extract file `.zip` tersebut.
-3. Masuk ke folder `bin`, cari file **`ffmpeg.exe`**.
-4. Copy dan Paste file **`ffmpeg.exe`** tersebut langsung ke dalam folder project ini (`D:\Data Joni\streamdown`).
+### **Untuk macOS**
+1. Instal FFmpeg via Homebrew:
+   ```bash
+   brew install ffmpeg
+   ```
+2. Jalankan di Terminal:
+   ```bash
+   python3 main.py
+   ```
 
 ## 🎮 Cara Penggunaan
-Cukup jalankan file `main.py` menggunakan Python:
 
+Anda memiliki dua pilihan antarmuka:
+
+### **Opsi A: Versi Terminal (Cepat)**
+Jalankan perintah:
 ```powershell
 python main.py
 ```
 
-1. Pilih menu **1** untuk mendownload.
-2. Masukkan URL lagu dari YouTube atau SoundCloud.
-3. Tunggu hingga proses selesai.
-4. Cek folder **Music/Streamdown** di komputer Anda.
-
-## 🛠️ Troubleshooting
-Jika muncul pesan `FFmpeg tidak ditemukan`:
-- Pastikan file `ffmpeg.exe` ada di folder yang sama dengan `main.py`.
-- Atau pastikan folder `bin` FFmpeg sudah terdaftar di **Environment Variables (PATH)** Windows Anda.
+### **Opsi B: Versi Web App (Modern)**
+1. Instal Streamlit: `pip install streamlit`
+2. Jalankan perintah:
+   ```powershell
+   streamlit run web.py
+   ```
+3. Browser Anda akan terbuka otomatis menampilkan STREAMDOWN Web.
 
 ---
-*Dibuat dengan ❤️ untuk pecinta musik.*
+*Dibuat dengan ❤️ untuk komunitas DJ.*
