@@ -139,8 +139,14 @@ def process_download(query, is_search=False, engine="YouTube"):
             if filters: cmd.extend(["--postprocessor-args", f"ffmpeg:-af {','.join(filters)}"])
             
             cmd.append(final_query)
-            subprocess.run(cmd, check=True)
-            status.update(label=f"✅ {query} Finished", state="complete")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                st.error("❌ Detail Error dari Server:")
+                st.code(result.stderr) # Menampilkan error asli dari yt-dlp/ffmpeg
+                status.update(label="❌ Gagal", state="error")
+            else:
+                status.update(label=f"✅ {query} Finished", state="complete")
         except Exception as e:
             st.error(f"Error: {e}")
 
